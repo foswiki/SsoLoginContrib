@@ -1,5 +1,13 @@
 %META:TOPICINFO{author="ProjectContributor" date="1439943920" format="1.1" version="$Rev$"}%
 ---+!! SSO Login Contrib Package
+<div class="foswikiHelp"> *Currently not functional*   This extension
+currently loops in the =Foswiki::LoginManager::SsoLogin::new()= routine.  
+
+With Foswiki, the user identity is not established during module
+initialization. It probably should be done in the getUser() routine.  This
+needs more work.
+</div>
+
 <!--
    Contributions to this contrib are appreciated. Please update the contrib page at
    http://twiki.org/cgi-bin/view/Plugins/SsoLoginContrib or provide feedback at
@@ -91,94 +99,6 @@ $Foswiki::cfg{SsoLoginContrib}{LoginUrl} = 'https://example.com/login?redirect=%
 # logout URL; %ORIGURL% is set to the original URL where the user is sent after logout:
 $Foswiki::cfg{SsoLoginContrib}{LogoutUrl} = 'https://example.com/logout?redirect=%ORIGURL%';
 </verbatim></blockquote>
-
-If you use Foswiki-5.1.1 and earlier you need to patch two Foswiki modules:
-   * =lib/Foswiki/Users/FoswikiUserMapping.pm= - patch required to show a proper %SYSTEMWEB%.WikiName for unregistered users
-   * =lib/Foswiki/Net.pm= - patch is only needed if a custom header is required to verify an auth token with the SSO API service
-%TWISTY{ mode="div" showlink="Show patch..." }%
-
-*Patch for =lib/Foswiki/Users/FoswikiUserMapping.pm=:*
-<verbatim>
---- lib/Foswiki/Users/FoswikiUserMapping.pm.save1	2012-04-02 16:19:48.414434038 +0000
-+++ lib/Foswiki/Users/FoswikiUserMapping.pm	2012-06-28 00:21:05.202658103 +0000
-@@ -452,6 +452,7 @@
-         if ($wikiname) {
-             # sanitise the generated WikiName
-             $wikiname =~ s/$Foswiki::cfg{NameFilter}//go;
-+            $wikiname =~ s/\.//go;
-         }
-     }
-</verbatim>
-
-*patch for =lib/Foswiki/Net.pm=:*
-<verbatim>
---- lib/Foswiki/Net.pm.save1	2012-04-02 16:19:46.360395747 +0000
-+++ lib/Foswiki/Net.pm	2012-06-23 05:02:03.952195847 +0000
-@@ -104,16 +107,17 @@
- <verbatim>
- my $response = Foswiki::Func::getExternalResource($url);
- if (!$response->is_error() && $response->isa('HTTP::Response')) {
--    ... other methods of HTTP::Response may be called
-+    $text = $response->content();
-+    # ... other methods of HTTP::Response may be called
- } else {
--    ... only the methods listed above may be called
-+    # ... only the methods listed above may be called
- }
- </verbatim>
- 
- =cut
- 
- sub getExternalResource {
--    my ($this, $url) = @_;
-+    my ( $this, $url, @headers ) = @_;
- 
-     my $protocol;
-     if( $url =~ m!^([a-z]+):! ) {
-@@ -125,7 +129,7 @@
- 
-     eval "use LWP";
-     unless( $@ ) {
--       return _GETUsingLWP( $this, $url );
-+       return _GETUsingLWP( $this, $url, @headers );
-     }
- 
-     # Fallback mechanism
-@@ -195,6 +199,12 @@
-         my $revstr=$1;
- 
-         $req .= 'User-Agent: Foswiki::Net/'.$revstr."\r\n";
-+        if( @headers ) {
-+            while( my $key = shift @headers ) {
-+                my $val = shift( @headers );
-+                $req .= "$key: $val\r\n" if( defined $val );
-+            }
-+        }
-         $req .= "\r\n\r\n";
- 
-         my ( $iaddr, $paddr, $proto );
-@@ -238,7 +248,7 @@
- 
- # =======================================
- sub _GETUsingLWP {
--    my( $this, $url ) = @_;
-+    my( $this, $url, @headers ) = @_;
- 
-     my ( $user, $pass );
-     if( $url =~ s!([^/\@:]+)(?::([^/\@:]+))?@!! ) {
-@@ -254,7 +264,9 @@
- 
-     '$Rev: 22570 (2012-01-14) $'=~/([0-9]+)/;
-     my $revstr=$1;
--    $request->header( 'User-Agent' => 'Foswiki::Net/'.$revstr." libwww-perl/$LWP::VERSION" );
-+    my @allHeaders = ( 'User-Agent' => 'Foswiki::Net/'.$revstr." libwww-perl/$LWP::VERSION" );
-+    push( @allHeaders, @headers ) if( @headers );
-+    $request->header( @allHeaders );
-     require Foswiki::Net::UserCredAgent;
-     my $ua = new Foswiki::Net::UserCredAgent( $user, $pass, $url );
-     my $response = $ua->request( $request );
-</verbatim>
-%ENDTWISTY%
 
 ---++ Installation Instructions
 

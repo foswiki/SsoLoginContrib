@@ -21,8 +21,8 @@ package Foswiki::Contrib::SsoLoginContrib;
 
 use strict;
 
-our $VERSION = 1.0;
-our $RELEASE = '2013-09-26';
+our $VERSION = 1.01;
+our $RELEASE = '2015-08-18';
 our $SHORTDESCRIPTION = "Generic SSO (Single Sign-on) module for Foswiki";
 
 =pod

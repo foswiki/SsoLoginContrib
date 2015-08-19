@@ -18,12 +18,14 @@ $Foswiki::cfg{SsoLoginContrib}{AuthTokenName} = 'x-authtoken-cookie-name';
 # of the auth token.
 $Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenUrl} = 'https://example.com/api/auth/%AUTHTOKEN%';
 
-# **STRING 60**
+# **PERL 60**
 # Some SSO APIs require to pass a key in the header of the http request to verify
-# a auth token. Specify comma-space separated pairs of header name and header value,
+# a auth token. Specify hash of the header-name => 'header value',
 # such as:
-# <pre>x-sso-api-key, API key value, x-any-other-name, any other value</pre>
-$Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader} = 'x-sso-api-key, API key value';
+# <pre>{ x-sso-api-key => 'API key value', x-any-other-name 'any other value'}</pre>
+$Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader} = {
+         'x-sso-api-key' => 'API key value',
+         };
 
 # **STRING 60**
 # Regular expression to extract the login name from the JSON response.

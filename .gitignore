@@ -1,0 +1,10 @@
+*,v
+*,pfv
+*.gz
+/SsoLoginContrib.md5
+/SsoLoginContrib.sha1
+/SsoLoginContrib.tgz
+/SsoLoginContrib.txt
+/SsoLoginContrib.zip
+/SsoLoginContrib_installer
+/SsoLoginContrib_installer.pl

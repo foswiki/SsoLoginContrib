@@ -30,13 +30,13 @@ Configuration:
 <verbatim>
 $Foswiki::cfg{SsoLoginContrib}{AuthTokenName} = 'name-of-authtoken-cookie';
 $Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenUrl} = 'https://example.com/api/auth/%AUTHTOKEN%';
-$Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader} = 'x-sso-api-key-name', api-key-value';
+$Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader} = { 'x-sso-api-key-name' => 'api-key-value' };
 $Foswiki::cfg{SsoLoginContrib}{VerifyResponseLoginRE} = '"loginName":"([^"]*)';
 $Foswiki::cfg{SsoLoginContrib}{LoginUrl} = 'https://example.com/login?redirect=%ORIGURL%';
 $Foswiki::cfg{SsoLoginContrib}{LogoutUrl} = 'https://example.com/logout?redirect=%ORIGURL%';
 </verbatim>
 
-See also FoswikiUserAuthentication.
+See also UserAuthentication.
 
 Subclass of Foswiki::LoginManager; see that class for documentation of the
 methods of this class.
@@ -45,6 +45,8 @@ methods of this class.
 
 package Foswiki::LoginManager::SsoLogin;
 use base 'Foswiki::LoginManager';
+
+use Foswiki::Net;
 
 use strict;
 use Assert;
@@ -73,15 +75,15 @@ sub new {
     $this->{authtoken} = $session->{request}->cookie( $name ) || '';
     $this->{loginName} = ''; 
     if( $this->{authtoken} ) {
-        my @headers = split( /, */, $Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader} );
+        my $headers = $Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenHeader};
         my $url = $Foswiki::cfg{SsoLoginContrib}{VerifyAuthTokenUrl};
         $url =~ s/%AUTHTOKEN%/$this->{authtoken}/go;
         my $response;
-        if( $Foswiki::Plugins::VERSION <= 1.4 ) {
-            $response = $session->net->getExternalResource( $url, @headers );
-        } else {
-            $response = $session->net->getExternalResource( $url, \@headers );
-        }
+
+        my $net = new Foswiki::Net();
+
+        $response = $session->net->getExternalResource( $url, headers => $headers );
+
         if (!$response->is_error() && $response->isa('HTTP::Response')) {
             # Example response in JSON format:
             #   {"message":null,"info":{"type":"named","displayName":"Firstname Lastname",
@@ -102,9 +104,11 @@ sub new {
 =cut
 
 sub _LOGOUTURL {
-    my( $foswiki, $params, $topic, $web ) = @_;
+    my( $this, $params, $topic, $web ) = @_;
 
-    my $redirectUrl = Foswiki::urlEncode( $foswiki->getScriptUrl( 1, 'view', $web, $topic ) );
+    my $session = $this->{session};
+
+    my $redirectUrl = Foswiki::urlEncode( $session->getScriptUrl( 1, 'view', $web, $topic ) );
     my $url = $Foswiki::cfg{SsoLoginContrib}{LogoutUrl};
     $url =~ s/%ORIGURL%/$redirectUrl/;
 
@@ -118,13 +122,14 @@ sub _LOGOUTURL {
 =cut
 
 sub _LOGOUT {
-    my( $foswiki, $params, $topic, $web ) = @_;
+    my( $this, $params, $topic, $web ) = @_;
 
-    return '' unless $foswiki->inContext( 'authenticated' );
+    my $session = $this->{session};
+    return '' unless $session->inContext( 'authenticated' );
 
     my $url = _LOGOUTURL( @_ );
     if( $url ) {
-        my $text = $foswiki->templates->expandTemplate( 'LOG_OUT' );
+        my $text = $session->templates->expandTemplate( 'LOG_OUT' );
         return CGI::a( {href=>$url }, $text );
     }
     return '';
@@ -141,20 +146,19 @@ Triggered on auth fail
 
 sub forceAuthentication {
     my $this  = shift;
-    my $foswiki = $this->{twiki};
+    my $session = $this->{session};
 
-    unless ( $foswiki->inContext( 'authenticated' ) ) {
-        my $query = $foswiki->{request};
+    unless ( $session->inContext( 'authenticated' ) ) {
+        my $query = $session->{request};
 
         # Redirect with passthrough so we don't lose the original query params
-        my $foswiki = $this->{twiki};
-        my $topic = $foswiki->{topicName};
-        my $web   = $foswiki->{webName};
-        my $redirectUrl = Foswiki::urlEncode( $Foswiki::cfg{DefaultUrlHost} . $foswiki->{request}->uri() );
+        my $topic = $session->{topicName};
+        my $web   = $session->{webName};
+        my $redirectUrl = Foswiki::urlEncode( $Foswiki::cfg{DefaultUrlHost} . $session->{request}->uri() );
         my $url = $Foswiki::cfg{SsoLoginContrib}{LoginUrl};
         $url =~ s/%ORIGURL%/$redirectUrl/;
 
-        $foswiki->redirect( $url, 1 );
+        $session->redirect( $url, 1 );
         return 1;
     }
     return undef;
@@ -168,10 +172,10 @@ sub forceAuthentication {
 
 sub loginUrl {
     my $this = shift;
-    my $foswiki = $this->{twiki};
-    my $topic = $foswiki->{topicName};
-    my $web = $foswiki->{webName};
-    my $redirectUrl = Foswiki::urlEncode( $foswiki->getScriptUrl( 1, 'view', $web, $topic ) );
+    my $session = $this->{session};
+    my $topic = $session->{topicName};
+    my $web = $session->{webName};
+    my $redirectUrl = Foswiki::urlEncode( $session->getScriptUrl( 1, 'view', $web, $topic ) );
     my $url = $Foswiki::cfg{SsoLoginContrib}{LoginUrl};
     $url =~ s/%ORIGURL%/$redirectUrl/;
     return $url;
@@ -188,15 +192,15 @@ if it needs to challenge the user
 =cut
 
 sub login {
-    my( $this, $query, $foswikiSession ) = @_;
+    my( $this, $query, $session ) = @_;
 
-    my $topic = $foswikiSession->{topicName};
-    my $web = $foswikiSession->{webName};
-    my $redirectUrl = Foswiki::urlEncode( $foswikiSession->getScriptUrl( 1, 'view', $web, $topic ) );
+    my $topic = $session->{topicName};
+    my $web = $session->{webName};
+    my $redirectUrl = Foswiki::urlEncode( $session->getScriptUrl( 1, 'view', $web, $topic ) );
     my $url = $Foswiki::cfg{SsoLoginContrib}{LoginUrl};
     $url =~ s/%ORIGURL%/$redirectUrl/;
 
-    $foswikiSession->redirect( $url, 1 );
+    $session->redirect( $url, 1 );
 }
 
 
@@ -211,7 +215,7 @@ returns the userLogin if stored in the apache CGI query (ie session)
 sub getUser {
     my $this = shift;
 
-    my $query = $this->{twiki}->{request};
+    my $query = $this->{session}->{request};
     my $authUser;
     # Ignore remote user if we got here via an error
     # Only useful with CGI engine & Apache webserver
